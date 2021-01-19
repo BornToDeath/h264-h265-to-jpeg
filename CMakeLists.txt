@@ -3,6 +3,13 @@ project(H265ToJpeg)
 
 set(CMAKE_CXX_STANDARD 11)
 
+# 是否是 debug 环境
+set(DEBUG YES)
+
+if(DEBUG)
+    ADD_DEFINITIONS(-D_BUILD_TYPE_DEBUG_)
+endif()
+
 # 头文件目录
 include_directories(
         inc
@@ -27,5 +34,4 @@ target_link_libraries(
         avutil
         swresample
         swscale
-#        ffmpeg
 )

@@ -85,7 +85,7 @@ int readCallback(void *opaque, uint8_t *buf, int buf_size) {
             memcpy(buf, h265_data + data->offset, real_read);
             data->offset += buf_size;
             if(DEBUG){
-                LOG("readCallback | read offset: %d", data->offset);
+                LOG("readCallback | read offset=%d", data->offset);
             }
             return real_read;
         }
@@ -100,60 +100,59 @@ int readCallback(void *opaque, uint8_t *buf, int buf_size) {
  * @return
  */
 int writeCallback(void *opaque, uint8_t *buf, int buf_size) {
-    struct Output *data = (struct Output *) opaque;
 
     if (buf_size > HEAP_SIZE) {
         return -1;
     }
 
+    struct Output *data = (struct Output *) opaque;
     memcpy(data->jpeg_data + data->offset, buf, buf_size);
     data->offset += buf_size;
+
     return buf_size;
 }
 
 /**
  *
  * @param pFrame
- * @param output_data
+ * @param outputData
  * @return
  */
-int saveJpeg(AVFrame *pFrame, struct Output *output_data) {
-    int width = pFrame->width;
-    int height = pFrame->height;
+int decode(AVFrame *pFrame, struct Output *outputData) {
 
-    if(DEBUG){
-        LOG("width=%d, height=%d", height, width);
-    }
-
-    AVCodecContext *pCodeCtx = NULL;
-
-    // 打开输出文件
-    AVFormatContext *pFormatCtx = NULL;
-    avformat_alloc_output_context2(&pFormatCtx, NULL, "mjpeg", NULL);
+    AVIOContext       *pIOCtx     = NULL;  /* ffmpeg 字节流 IO 上下文 */
+    AVFormatContext   *pFormatCtx = NULL;  /* ffmpeg 的全局上下文，所有 ffmpeg 都需要 */
+    AVCodecContext    *pCodeCtx   = NULL;  /* ffmpeg 编解码上下文 */
+    AVCodec           *pCodec     = NULL;  /* ffmpeg 编解码器 */
+    AVCodecParameters *pCodecPars = NULL;  /* ffmpeg 编解码器参数 */
+    AVStream          *pStream    = NULL;  /* ffmpeg 视频流 */
+    AVPacket          pkt;                 /* ffmpeg 单帧数据包 */
 
     unsigned char *outBuf = (unsigned char *)av_malloc(HEAP_SIZE);
 
-    // 新建一个 AVIOContext ，并与 pFormatCtx 关联
-    AVIOContext *avioCtx = avio_alloc_context(outBuf, HEAP_SIZE, 1, output_data, NULL, writeCallback, NULL);
+    // 初始化 AVIOContext。将 outputData 中数据 写入到 outBuf 中
+    pIOCtx = avio_alloc_context(outBuf, HEAP_SIZE, 1, outputData, NULL, writeCallback, NULL);
 
-    pFormatCtx->pb = avioCtx;
+    // 打开输出文件，初始化输出视频码流的 AVFormatContext
+    avformat_alloc_output_context2(&pFormatCtx, NULL, "mjpeg", NULL);
+
+    pFormatCtx->pb    = pIOCtx;
     pFormatCtx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_FLUSH_PACKETS;
 
-    // 构建一个新 stream
-    AVStream *pAVStream = avformat_new_stream(pFormatCtx, 0);
-    if (pAVStream == NULL) {
+    // 创建输出码流的 AVStream
+    pStream = avformat_new_stream(pFormatCtx, NULL);
+    if (pStream == NULL) {
         return -1;
     }
 
-    AVCodecParameters *parameters = pAVStream->codecpar;
-    parameters->codec_id = pFormatCtx->oformat->video_codec;
-    parameters->codec_type = AVMEDIA_TYPE_VIDEO;
-    parameters->format = AV_PIX_FMT_YUVJ420P;
-    parameters->width = pFrame->width;
-    parameters->height = pFrame->height;
+    pCodecPars             = pStream->codecpar;
+    pCodecPars->codec_id   = pFormatCtx->oformat->video_codec;
+    pCodecPars->codec_type = AVMEDIA_TYPE_VIDEO;
+    pCodecPars->format     = AV_PIX_FMT_YUVJ420P;
+    pCodecPars->width      = pFrame->width;
+    pCodecPars->height     = pFrame->height;
 
-    AVCodec *pCodec = avcodec_find_encoder(pAVStream->codecpar->codec_id);
-
+    pCodec = avcodec_find_encoder(pCodecPars->codec_id);
     if (!pCodec) {
         LOG("Could not find encoder");
         return -1;
@@ -165,9 +164,9 @@ int saveJpeg(AVFrame *pFrame, struct Output *output_data) {
         return -1;
     }
 
-    int ret = avcodec_parameters_to_context(pCodeCtx, pAVStream->codecpar);
-    if ( ret < 0) {
-        fprintf(stderr, "Failed to copy %s codec parameters to decoder context\n",
+    int ret = avcodec_parameters_to_context(pCodeCtx, pCodecPars);
+    if (ret < 0) {
+        fprintf(stderr, "Failed to copy %s codec pCodecPars to decoder context\n",
                 av_get_media_type_string(AVMEDIA_TYPE_VIDEO));
         return -1;
     }
@@ -175,23 +174,21 @@ int saveJpeg(AVFrame *pFrame, struct Output *output_data) {
     pCodeCtx->time_base = (AVRational) {1, 25};
 
     ret = avcodec_open2(pCodeCtx, pCodec, NULL);
-    if ( ret < 0) {
+    if (ret < 0) {
         LOG("Could not open codec.");
         return -1;
     }
 
+    // 写文件头
     ret = avformat_write_header(pFormatCtx, NULL);
     if (ret < 0) {
         LOG("write_header fail");
         return -1;
     }
 
-    int y_size = width * height;
-
     //Encode
     // 给AVPacket分配足够大的空间
-    AVPacket pkt;
-    av_new_packet(&pkt, y_size * 3);
+    av_new_packet(&pkt, pFrame->width * pFrame->height * 3);
 
     // 编码数据
     ret = avcodec_send_frame(pCodeCtx, pFrame);
@@ -209,24 +206,31 @@ int saveJpeg(AVFrame *pFrame, struct Output *output_data) {
 
     // LOG("av_write_frame");
     ret = av_write_frame(pFormatCtx, &pkt);
-    avio_flush(avioCtx);
+    avio_flush(pIOCtx);
     // LOG("av_write_frame done");
     if (ret < 0) {
         LOG("Could not av_write_frame");
         return -1;
     }
 
-    // LOG("av_packet_unref");
-    av_packet_unref(&pkt);
-
-    //Write Trailer
+    // 写文件尾
     av_write_trailer(pFormatCtx);
     // LOG("av_write_trailer");
+
+    // LOG("av_packet_unref");
+    av_packet_unref(&pkt);
 
     if (pFormatCtx->pb) {
         avio_context_free(&pFormatCtx->pb);
     }
     // LOG("avio_free");
+
+    // LOG("avcodec_close");
+    /**
+     * int avcodec_close(AVCodecContext *avctx);
+     * 关闭给定的 AVCodecContext 并释放与之关联的所有数据（但不是 AVCodecContext 本身）
+     */
+    avcodec_close(pCodeCtx);
 
     if (pFormatCtx) {
         /**
@@ -236,15 +240,6 @@ int saveJpeg(AVFrame *pFrame, struct Output *output_data) {
         avformat_free_context(pFormatCtx);
     }
     // LOG("avformat_free_context");
-
-    if (pCodeCtx) {
-        /**
-         * int avcodec_close(AVCodecContext *avctx);
-         * 关闭给定的 AVCodecContext 并释放与之关联的所有数据（但不是 AVCodecContext 本身）
-         */
-        avcodec_close(pCodeCtx);
-    }
-    // LOG("avcodec_close");
 
     return 0;
 }
@@ -292,7 +287,8 @@ int convert(struct Input *inputData, struct Output *outputData) {
 
     /**
      * int avformat_open_input(AVFormatContext **ps, const char *url, ff_const59 AVInputFormat *fmt, AVDictionary **options);
-     * 打开输入流并读取标头。成功返回 0 ，失败返回负值
+     * 打开输入文件，初始化输入视频码流的 AVFormatContext
+     * 成功返回 0 ，失败返回负值
      *   ps:      指向用户提供的 AVFormatContext 指针
      *   url:     要打开的流的 url
      *   fmt:     如果非空，则此参数强制使用特定的输入格式，否则将自动检测格式
@@ -329,6 +325,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
      * AVCodec *avcodec_find_decoder(enum AVCodecID id);
      * 根据解码器 ID 查找匹配的已注册解码器。未找到返回 NULL
      */
+    // 对找到的视频流寻解码器  // todo 软解？？？断点查看是硬解还是软解，是否能调试源码
     codec = avcodec_find_decoder(codecPar->codec_id);
     if (!codec) {
         LOG("%s line=%d | Error in get the codec", __FUNCTION__, __LINE__);
@@ -349,11 +346,44 @@ int convert(struct Input *inputData, struct Output *outputData) {
         return -1;
     }
 
+    if(DEBUG){
+        char type[32];
+        switch (codecCtx->codec_type) {
+            case AVMEDIA_TYPE_UNKNOWN:
+                strcpy(type, "AVMEDIA_TYPE_UNKNOWN");
+                break;
+            case AVMEDIA_TYPE_VIDEO:
+                strcpy(type, "AVMEDIA_TYPE_VIDEO");
+                break;
+            case AVMEDIA_TYPE_AUDIO:
+                strcpy(type, "AVMEDIA_TYPE_AUDIO");
+                break;
+            case AVMEDIA_TYPE_DATA:
+                strcpy(type, "AVMEDIA_TYPE_DATA");
+                break;
+            case AVMEDIA_TYPE_SUBTITLE:
+                strcpy(type, "AVMEDIA_TYPE_SUBTITLE");
+                break;
+            case AVMEDIA_TYPE_ATTACHMENT:
+                strcpy(type, "AVMEDIA_TYPE_ATTACHMENT");
+                break;
+            case AVMEDIA_TYPE_NB:
+                strcpy(type, "AVMEDIA_TYPE_NB");
+                break;
+            default:
+                LOG("No stream type!");
+        }
+        LOG("Stream type is: %s", type);
+    }
+
     /**
      * int avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options);
      * 初始化 AVCodeContext 以使用给定的 AVCodec
      */
-    avcodec_open2(codecCtx, codec, NULL); //打开解码器
+    // 打开解码器
+    avcodec_open2(codecCtx, codec, NULL);
+
+    LOG("codecCtx->width=%d, codecCtx->height=%d", codecCtx->width, codecCtx->height);
 
     frame = av_frame_alloc(); // 初始化帧, 用默认值填充字段
     if (!frame) {
@@ -374,7 +404,9 @@ int convert(struct Input *inputData, struct Output *outputData) {
      * 返回流的下一帧。此函数返回存储在文件中的内容，不对有效的帧进行验证，不会省略有效帧之间的无效数据，以便给解码器最大可用于解码的信息。
      * 成功返回 >=0 （>0 是文件末尾），失败返回负值
      */
-    av_read_frame(fmtCtx, &packet); //从文件中读取一个数据包, 存储到avpkt中
+    // 从输入文件中读取一个数据包, 存储到 packet 中。一个 packet 是一帧压缩数据（I + P + P + ...）？
+    av_read_frame(fmtCtx, &packet);
+
     if (packet.stream_index == streamType) {                                                 // 读取的数据包类型正确
         /**
          * int avcodec_send_packet(AVCodecContext *avctx, const AVPacket *packet);
@@ -394,14 +426,107 @@ int convert(struct Input *inputData, struct Output *outputData) {
          * avctx: 编解码器上下文
          * frame:
          */
-        // 循环获取数据（一个分组数据包可能存在多帧数据）
+        // 从解码器获取解码后的帧，循环获取数据（一个分组数据包可能存在多帧数据）
+        // 异步获取数据，前面 avcodec_send_packet() ，后面 while 循环接收 frame
         while (avcodec_receive_frame(codecCtx, frame) == 0) {
-            return saveJpeg(frame, outputData);
+            return decode(frame, outputData);
         }
     }
 
+    // 释放数据包
     av_packet_unref(&packet);
 
+    // 关闭解码器
+    avcodec_close(codecCtx);
+
+    // 关闭 ffmpeg 上下文
+    avformat_close_input(&fmtCtx);
+
+    return 0;
+}
+
+struct Input * readH265File(const char * const filePath) {
+
+    const char *const h265FileType = "h265";
+    const int size = strlen(h265FileType);
+
+    if (strlen(filePath) <= size) {
+        LOG("源文件的文件名不正确！");
+        return NULL;
+    }
+
+    // 获取源文件的文件类型
+    char fileType[size + 1] = "";
+    memset(fileType, 0, size + 1);
+    strncpy(fileType, filePath + (strlen(filePath) - size), size);
+
+    if (!(strcmp(fileType, "h265") == 0 || strcmp(fileType, "H265") == 0)) {
+        LOG("源文件不是 h265 格式的文件！");
+        return NULL;
+    }
+
+    char *inputBuf = (char *) malloc(HEAP_SIZE * sizeof(char));
+    if (!inputBuf) {
+        LOG("%s line=%d | malloc failed.", __FUNCTION__, __LINE__);
+        return NULL;
+    }
+
+    FILE *fp_read = fopen(filePath, "rb+");
+    if (!fp_read) {
+        LOG("Open file error! filePath=%s, errno=%d", filePath, errno);
+        return NULL;
+    }
+
+    memset(inputBuf, 0, HEAP_SIZE);
+
+    size_t fileLen = fread(inputBuf, 1, HEAP_SIZE, fp_read);
+    if (fileLen == 0) {
+        LOG("H265 文件为空！H265 文件路径：%s", filePath);
+        fclose(fp_read);
+        return NULL;
+    }
+
+    struct Input *inputData = (struct Input *) malloc(sizeof(struct Input));
+    if (!inputData) {
+        LOG("%s line=%d | malloc failed.", __FUNCTION__, __LINE__);
+        return NULL;
+    }
+
+    inputData->h265_data = inputBuf;
+    inputData->offset = 0;
+    inputData->size = fileLen;
+
+    fclose(fp_read);
+
+    return inputData;
+}
+
+int write2Jpeg(const struct Output * const data, const char * const filePath){
+
+    int offset = data->offset;
+    char *buf = (char *) malloc(offset + 1);
+    if(!buf){
+        LOG("%s line=%d | malloc failed.", __FUNCTION__, __LINE__);
+        return -1;
+    }
+
+    memset(buf, 0, offset + 1);
+    memcpy(buf, data->jpeg_data, offset);
+
+    FILE *fp_write = fopen(filePath, "wb+");
+    if (!fp_write) {
+        LOG("Open file error! filePath=%s, errno=%d", filePath, errno);
+        return -1;
+    }
+
+    size_t ret = fwrite(buf, 1, offset, fp_write);
+    if(ret == 0){
+        LOG("%s line=%d | 保存 Jpeg 文件出错！Jpeg 文件路径：%s", __FUNCTION__, __LINE__, filePath);
+        fclose(fp_write);
+        return -1;
+    }
+
+    fclose(fp_write);
     return 0;
 }
 
@@ -419,97 +544,70 @@ int H265ToJpeg() {
     char *inputFile = "/Users/lixiaoqing/Desktop/lixiaoqing/codes/c++/H265ToJpeg/imgs/img02.h265";
     LOG("源文件：%s", inputFile);
 
-    const char * const h265FileType = "h265";
-    const int size = strlen(h265FileType);
-
-    if(strlen(inputFile) <= size){
-        LOG("源文件的文件名不正确！");
-        return -1;
-    }
-
-    // 获取源文件的文件类型
-    char fileType[size+1] = "";
-    memset(fileType, 0, size+1);
-    strncpy(fileType, inputFile + (strlen(inputFile) - size), size);
-
-    if(!(strcmp(fileType, "h265") == 0 || strcmp(fileType, "H265") == 0)){
-        LOG("源文件不是 h265 格式的文件！");
-        return -1;
-    }
-
-    FILE *fp_read = fopen(inputFile, "rb+");
-    if (!fp_read) {
-        LOG("Open file error! inputFile=%s, errno=%d", inputFile, errno);
-        return -1;
-    }
-
-    char *inputBuf = (char *) malloc(HEAP_SIZE * sizeof(char));
-    memset(inputBuf, 0, HEAP_SIZE);
-
-    size_t fileLen = fread(inputBuf, 1, HEAP_SIZE, fp_read);
-    if (!fileLen) {
-        LOG("Read file error! inputFile=%s, fileLen=%ld", inputFile, fileLen);
+    struct Input * inputData = readH265File(inputFile);
+    if(!inputData){
         return -1;
     }
 
     if(DEBUG){
-        LOG("H265 file length=%ldB", fileLen);
+        LOG("H265 file length=%dB", inputData->size);
     }
 
     /**
      * 【2】H265 转 Jpeg
      */
 
-    struct Input inputData;
-    inputData.h265_data = inputBuf;
-    inputData.offset = 0;
-    inputData.size = fileLen;
-
     char *outputBuf = (char *) malloc(HEAP_SIZE * sizeof(char));
-    memset(outputBuf, 0, HEAP_SIZE);
-
-    struct Output outputData;
-    outputData.jpeg_data = outputBuf;
-    outputData.offset = 0;
-
-    int ret = convert(&inputData, &outputData);
-    if (ret != 0) {
+    if(!outputBuf){
+        LOG("%s line=%d | malloc failed.", __FUNCTION__, __LINE__);
         return -1;
     }
 
-    int offset = outputData.offset;
+    memset(outputBuf, 0, HEAP_SIZE);
+
+    struct Output * outputData = (struct Output *)malloc(sizeof(struct Output));
+    if(!outputData){
+        LOG("%s line=%d | malloc failed.", __FUNCTION__, __LINE__);
+        return -1;
+    }
+
+    outputData->jpeg_data = outputBuf;
+    outputData->offset = 0;
+
+    int ret = convert(inputData, outputData);
+    if (ret != 0) {
+        LOG("%s line=%d | H265 解码为 Jpeg 出错！ret=%d", __FUNCTION__, __LINE__, ret);
+        return -1;
+    }
 
     /**
      * 【3】保存 Jpeg 图片数据
      */
 
     char *outputFile = "/Users/lixiaoqing/Desktop/lixiaoqing/codes/c++/H265ToJpeg/imgs/output.jpeg";
-    char *buf = (char *) malloc(offset + 1);
-    memset(buf, 0, offset + 1);
-    memcpy(buf, outputBuf, offset);
+    LOG("目标文件：%s", outputFile);
 
-    FILE *fp_write = fopen(outputFile, "wb+");
-    if (!fp_write) {
-        LOG("Open file error! outputFile=%s, errno=%d", outputFile, errno);
+    ret = write2Jpeg(outputData, outputFile);
+    if(ret == -1){
+        LOG("%s line=%d | 保存 Jpeg 文件出错！Jpeg 文件路径：%s", __FUNCTION__, __LINE__, outputFile);
         return -1;
     }
 
-    fwrite(buf, 1, offset, fp_write);
-
-    LOG("目标文件：%s", outputFile);
-
-    if (inputBuf) {
-        free(inputBuf);
-    }
-    if (outputBuf) {
-        free(outputBuf);
-    }
-    if (buf) {
-        free(buf);
+    if (inputData) {
+        if(inputData->h265_data){
+            free(inputData->h265_data);
+            inputData->h265_data = NULL;
+        }
+        free(inputData);
     }
 
-    fclose(fp_read);
-    fclose(fp_write);
+    if (outputData) {
+        if(outputData->jpeg_data){
+            free(outputData->jpeg_data);
+            outputData->jpeg_data = NULL;
+        }
+        free(outputData);
+    }
 
     return 0;
 }

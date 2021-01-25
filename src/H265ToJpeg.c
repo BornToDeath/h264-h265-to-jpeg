@@ -118,7 +118,7 @@ int writeCallback(void *opaque, uint8_t *buf, int buf_size) {
  * @param outputData
  * @return
  */
-int decode(AVFrame *pFrame, struct Output *outputData) {
+int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
 
     AVIOContext       *pIOCtx     = NULL;  /* ffmpeg 字节流 IO 上下文 */
     AVFormatContext   *pFormatCtx = NULL;  /* ffmpeg 的全局上下文，所有 ffmpeg 都需要 */
@@ -130,8 +130,15 @@ int decode(AVFrame *pFrame, struct Output *outputData) {
 
     unsigned char *outBuf = (unsigned char *)av_malloc(HEAP_SIZE);
 
-    // 初始化 AVIOContext。将 outputData 中数据 写入到 outBuf 中
+    // 初始化 AVIOContext。将 outputData 中数据写入到 outBuf 中
     pIOCtx = avio_alloc_context(outBuf, HEAP_SIZE, 1, outputData, NULL, writeCallback, NULL);
+
+    /**
+     * int avformat_alloc_output_context2(AVFormatContext **ctx, ff_const59 AVOutputFormat *oformat,
+                                   const char *format_name, const char *filename);
+     * 初始化一个用于输出的 AVFormatContext 结构体
+     * 参考：https://blog.csdn.net/leixiaohua1020/article/details/41198929
+     */
 
     // 打开输出文件，初始化输出视频码流的 AVFormatContext
     avformat_alloc_output_context2(&pFormatCtx, NULL, "mjpeg", NULL);
@@ -152,6 +159,14 @@ int decode(AVFrame *pFrame, struct Output *outputData) {
     pCodecPars->width      = pFrame->width;
     pCodecPars->height     = pFrame->height;
 
+    if(DEBUG){
+        LOG("解码后原始数据类型：%d", pFrame->format);  // format 是 AVPixelFormat 类型
+        LOG("是否是关键帧：%d", pFrame->key_frame);
+        LOG("帧类型：%d", pFrame->pict_type);
+        LOG("帧时间戳：%lld", pFrame->pts);
+    }
+
+    // 通过 id 查找一个匹配的已经注册的音视频编码器
     pCodec = avcodec_find_encoder(pCodecPars->codec_id);
     if (!pCodec) {
         LOG("Could not find encoder");
@@ -179,10 +194,17 @@ int decode(AVFrame *pFrame, struct Output *outputData) {
         return -1;
     }
 
-    // 写文件头
+    /**
+     * int avformat_write_header(AVFormatContext *s, AVDictionary **options);
+     * 把流头信息写入到媒体文件中。成功返回 0
+     *   s      : ffmpeg 上下文
+     *   options: 额外选项
+     */
+
+    // 写视频文件头
     ret = avformat_write_header(pFormatCtx, NULL);
     if (ret < 0) {
-        LOG("write_header fail");
+        LOG("avformat_write_header fail");
         return -1;
     }
 
@@ -204,32 +226,43 @@ int decode(AVFrame *pFrame, struct Output *outputData) {
         return -1;
     }
 
-    // LOG("av_write_frame");
+    /**
+     * int av_write_frame(AVFormatContext *s, AVPacket *pkt);
+     * 输出一帧音视频数据
+     *   s  : AVFormatContext 输出上下文
+     *   pkt: 待输出的 AVPacket
+     */
+
+    // 写视频数据
     ret = av_write_frame(pFormatCtx, &pkt);
-    avio_flush(pIOCtx);
-    // LOG("av_write_frame done");
     if (ret < 0) {
         LOG("Could not av_write_frame");
         return -1;
     }
 
-    // 写文件尾
-    av_write_trailer(pFormatCtx);
-    // LOG("av_write_trailer");
+    // 强制清除缓存中的数据
+    avio_flush(pIOCtx);
 
-    // LOG("av_packet_unref");
+    // 写视频文件尾
+    ret = av_write_trailer(pFormatCtx);
+    if (ret < 0) {
+        LOG("av_write_trailer fail");
+        return -1;
+    }
+
     av_packet_unref(&pkt);
 
     if (pFormatCtx->pb) {
+        // 关闭和释放 AVIOContext
         avio_context_free(&pFormatCtx->pb);
     }
-    // LOG("avio_free");
 
-    // LOG("avcodec_close");
     /**
      * int avcodec_close(AVCodecContext *avctx);
      * 关闭给定的 AVCodecContext 并释放与之关联的所有数据（但不是 AVCodecContext 本身）
      */
+
+    // 关闭编码器
     avcodec_close(pCodeCtx);
 
     if (pFormatCtx) {
@@ -237,9 +270,10 @@ int decode(AVFrame *pFrame, struct Output *outputData) {
          * void avformat_free_context(AVFormatContext *s);
          * 释放 AVFormatContext 上下文
          */
+
+        // 释放 AVFormatContext
         avformat_free_context(pFormatCtx);
     }
-    // LOG("avformat_free_context");
 
     return 0;
 }
@@ -273,27 +307,39 @@ int convert(struct Input *inputData, struct Output *outputData) {
                   int (*read_packet)(void *opaque, uint8_t *buf, int buf_size),
                   int (*write_packet)(void *opaque, uint8_t *buf, int buf_size),
                   int64_t (*seek)(void *opaque, int64_t offset, int whence));
-     * 为缓冲 I/O 分配并初始化 AVIOContext ，稍后必须使用 avio_context_free() 释放它
-     * 从 opaque 中读取数据，读到 buffer 中
+     * 为缓冲 I/O 分配并初始化 AVIOContext 。从 opaque 中读取数据，读到 buffer 中
+     *   buffer         : 输入/输出缓存内存块，必须是使用 av_malloc() 分配的
+     *   buffer_size    : 缓存大小
+     *   write_flag     : 如果缓存为可写则设置为 1 ，否则设置为 0
+     *   opaque         : 指针，用于回调时使用
+     *   (*read_packet) : 读回调
+     *   (*write_packet): 写回调
      */
+
+    // 从输入的 H265 文件中读取数据到 ioBuf 中
     avio = avio_alloc_context(ioBuf, HEAP_SIZE, 0, inputData, readCallback, NULL, NULL);
 
     /**
      * AVFormatContext *avformat_alloc_context(void);
      * 初始化 ffmpeg 上下文
      */
+
+    // 初始化 AVFormatContext
     fmtCtx = avformat_alloc_context();
+
+    // pb: IO 上下文，通过对该变量进行赋值可改变输入源或输出目的
     fmtCtx->pb = avio;
 
     /**
      * int avformat_open_input(AVFormatContext **ps, const char *url, ff_const59 AVInputFormat *fmt, AVDictionary **options);
      * 打开输入文件，初始化输入视频码流的 AVFormatContext
-     * 成功返回 0 ，失败返回负值
+     * 成功返回值 >=0 ，失败返回负值
      *   ps:      指向用户提供的 AVFormatContext 指针
      *   url:     要打开的流的 url
      *   fmt:     如果非空，则此参数强制使用特定的输入格式，否则将自动检测格式
-     *   options: 包含 AVFormatContext 和 demuxer 私有选项的字典。返回时，此参数将被销毁并替换为包含找不到的选项，都有效则返回为空
+     *   options: 附加选项，一般可为 NULL
      */
+
     int ret = avformat_open_input(&fmtCtx, "nothing", NULL, NULL);
     if (ret < 0) {
         LOG("%s line=%d | Error in avformat_open_input(), ret=%d", __FUNCTION__, __LINE__, ret);
@@ -304,8 +350,9 @@ int convert(struct Input *inputData, struct Output *outputData) {
      * int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options);
      * 探测码流格式。读取检查媒体文件的数据包以获取具体的流信息，如媒体存入的编码格式。失败返回负值
      *   ic:      媒体文件上下文
-     *   options: 字典，包含一些配置选项
+     *   options: 额外选项，包含一些配置选项
      */
+
     ret = avformat_find_stream_info(fmtCtx, NULL);
     if (ret < 0) {
         LOG("%s line=%d | Error in find stream, ret=%d", __FUNCTION__, __LINE__, ret);
@@ -323,9 +370,10 @@ int convert(struct Input *inputData, struct Output *outputData) {
 
     /**
      * AVCodec *avcodec_find_decoder(enum AVCodecID id);
-     * 根据解码器 ID 查找匹配的已注册解码器。未找到返回 NULL
+     * 根据解码器 ID 查找一个匹配的已注册解码器。未找到返回 NULL
      */
-    // 对找到的视频流寻解码器  // todo 软解？？？断点查看是硬解还是软解，是否能调试源码
+
+    // 对找到的视频流解码器  // todo 软解？？？断点查看是硬解还是软解，是否能调试源码
     codec = avcodec_find_decoder(codecPar->codec_id);
     if (!codec) {
         LOG("%s line=%d | Error in get the codec", __FUNCTION__, __LINE__);
@@ -378,16 +426,22 @@ int convert(struct Input *inputData, struct Output *outputData) {
 
     /**
      * int avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options);
-     * 初始化 AVCodeContext 以使用给定的 AVCodec
+     * 使用给定的 AVCodec 初始化 AVCodeContext
+     *   avctx: 需要初始化的 AVCodecContext
+     *   codec: 输入的 AVCodec
      */
+
     // 打开解码器
     avcodec_open2(codecCtx, codec, NULL);
 
-    LOG("codecCtx->width=%d, codecCtx->height=%d", codecCtx->width, codecCtx->height);
+    if(DEBUG) {
+        LOG("codecCtx->width=%d, codecCtx->height=%d", codecCtx->width, codecCtx->height);
+    }
 
-    frame = av_frame_alloc(); // 初始化帧, 用默认值填充字段
+    // 初始化 AVFrame ，用默认值填充字段
+    frame = av_frame_alloc();
     if (!frame) {
-        LOG("Error in allocate the frame");
+        LOG("%s line=%d | Error in allocate the frame", __FUNCTION__, __LINE__);
         return -1;
     }
 
@@ -395,16 +449,21 @@ int convert(struct Input *inputData, struct Output *outputData) {
      * void av_init_packet(AVPacket *pkt);
      * 初始化数据包
      */
+
     av_init_packet(&packet);
     packet.data = NULL;
     packet.size = 0;
 
     /**
      * int av_read_frame(AVFormatContext *s, AVPacket *pkt);
+     *   s  : 输入的 AVFormatContext
+     *   pkt: 输出的 AVPacket
      * 返回流的下一帧。此函数返回存储在文件中的内容，不对有效的帧进行验证，不会省略有效帧之间的无效数据，以便给解码器最大可用于解码的信息。
      * 成功返回 >=0 （>0 是文件末尾），失败返回负值
      */
-    // 从输入文件中读取一个数据包, 存储到 packet 中。一个 packet 是一帧压缩数据（I + P + P + ...）？
+
+    // 读取码流数据中的一帧视频帧。从输入文件中读取一个 AVPacket 数据包, 存储到 packet 中。一个 packet 是一帧压缩数据（I + P + P + ...）？
+
     av_read_frame(fmtCtx, &packet);
 
     if (packet.stream_index == streamType) {                                                 // 读取的数据包类型正确
@@ -414,6 +473,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
          * avctx: 编解码器上下文
          * packet:
          */
+
         // 将数据包发送到解码器中
         if (avcodec_send_packet(codecCtx, &packet) < 0) {
             LOG("Error in the send packet");
@@ -426,10 +486,15 @@ int convert(struct Input *inputData, struct Output *outputData) {
          * avctx: 编解码器上下文
          * frame:
          */
+
         // 从解码器获取解码后的帧，循环获取数据（一个分组数据包可能存在多帧数据）
         // 异步获取数据，前面 avcodec_send_packet() ，后面 while 循环接收 frame
         while (avcodec_receive_frame(codecCtx, frame) == 0) {
-            return decode(frame, outputData);
+            ret = yuv2Jpeg(frame, outputData);
+            if (ret != 0) {
+                LOG("Yuv 编码为 Jpeg 失败！ret=%d", ret);
+            }
+            break;
         }
     }
 
@@ -442,7 +507,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
     // 关闭 ffmpeg 上下文
     avformat_close_input(&fmtCtx);
 
-    return 0;
+    return ret;
 }
 
 struct Input * readH265File(const char * const filePath) {

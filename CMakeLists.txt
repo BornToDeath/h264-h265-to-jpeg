@@ -23,8 +23,14 @@ link_directories(
 # 源文件
 aux_source_directory(src DIR_SRCS)
 
+# 编译成静态库
+add_library(H265ToJpeg SHARED ${DIR_SRCS})
+
 # 编为成可执行文件
-add_executable(H265ToJpeg main.cpp ${DIR_SRCS})
+#add_executable(H265ToJpeg main.cpp ${DIR_SRCS})
+#add_executable(H265ToJpeg main.cpp)
+
+# 链接库
 target_link_libraries(
         H265ToJpeg
         avcodec

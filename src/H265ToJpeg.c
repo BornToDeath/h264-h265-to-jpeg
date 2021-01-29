@@ -64,7 +64,7 @@ void LOG(const char * format, ...){
  * @return 注意：返回值是读取的字节数
  */
 int readCallback(void *opaque, uint8_t *buf, int buf_size) {
-    //从 h256_data 拷贝到 buf 中 buf_size 个字节
+    //从 opaque 拷贝 buf_size 个字节到 buf 中
     struct Input *data = (struct Input *) opaque;
     int size = data->size;
     char *h265_data = data->h265_data;
@@ -100,7 +100,7 @@ int readCallback(void *opaque, uint8_t *buf, int buf_size) {
  * @return
  */
 int writeCallback(void *opaque, uint8_t *buf, int buf_size) {
-
+    // 从 buf 中拷贝 buf_size 个字节到 opaque 中
     if (buf_size > HEAP_SIZE) {
         return -1;
     }
@@ -159,11 +159,12 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
     pCodecPars->width      = pFrame->width;
     pCodecPars->height     = pFrame->height;
 
-    if(DEBUG){
+    if(DEBUG) {
         LOG("解码后原始数据类型：%d", pFrame->format);  // format 是 AVPixelFormat 类型
         LOG("是否是关键帧：%d", pFrame->key_frame);
         LOG("帧类型：%d", pFrame->pict_type);
         LOG("帧时间戳：%lld", pFrame->pts);
+        LOG("codec_id=%d", pCodecPars->codec_id);
     }
 
     // 通过 id 查找一个匹配的已经注册的音视频编码器
@@ -173,12 +174,14 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
         return -1;
     }
 
+    // 申请 AVCodecContext 空间
     pCodeCtx = avcodec_alloc_context3(pCodec);
     if (!pCodeCtx) {
         fprintf(stderr, "Could not allocate video codec context\n");
         return -1;
     }
 
+    // 替换编码器 AVCodecContext 上下文参数
     int ret = avcodec_parameters_to_context(pCodeCtx, pCodecPars);
     if (ret < 0) {
         fprintf(stderr, "Failed to copy %s codec pCodecPars to decoder context\n",
@@ -186,8 +189,10 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
         return -1;
     }
 
+    // 设置时基。该字段解码时无需设置，编码时需要用户手动指定
     pCodeCtx->time_base = (AVRational) {1, 25};
 
+    // 打开编码器
     ret = avcodec_open2(pCodeCtx, pCodec, NULL);
     if (ret < 0) {
         LOG("Could not open codec.");
@@ -208,7 +213,6 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
         return -1;
     }
 
-    //Encode
     // 给AVPacket分配足够大的空间
     av_new_packet(&pkt, pFrame->width * pFrame->height * 3);
 
@@ -225,6 +229,8 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
         LOG("Could not avcodec_receive_packet");
         return -1;
     }
+//    pkt.pts = av_rescale_q(pkt.pts, pCodeCtx->time_base, pStream->time_base);
+//    av_packet_rescale_ts(&pkt, pCodeCtx->time_base, pStream->time_base);
 
     /**
      * int av_write_frame(AVFormatContext *s, AVPacket *pkt);
@@ -250,6 +256,7 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
         return -1;
     }
 
+    // 释放数据包
     av_packet_unref(&pkt);
 
     if (pFormatCtx->pb) {
@@ -359,6 +366,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
         return -1;
     }
 
+    // 获取视频流的索引
     streamType = av_find_best_stream(fmtCtx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
     if (streamType < 0) {
         LOG("Error in find best stream type");
@@ -367,6 +375,11 @@ int convert(struct Input *inputData, struct Output *outputData) {
 
     // 获取流对应的解码器参数
     codecPar = fmtCtx->streams[streamType]->codecpar;
+
+    if(DEBUG) {
+        struct AVRational base = fmtCtx->streams[streamType]->time_base;
+        LOG("时基：num=%d, den=%d", base.num, base.den);
+    }
 
     /**
      * AVCodec *avcodec_find_decoder(enum AVCodecID id);
@@ -380,14 +393,18 @@ int convert(struct Input *inputData, struct Output *outputData) {
         return -1;
     }
 
-    // 初始化解码器上下文
+    /**
+     * AVCodecContext *avcodec_alloc_context3(const AVCodec *codec);
+     * 申请 AVCodecContext 空间
+     */
+
     codecCtx = avcodec_alloc_context3(codec);
     if (!codecCtx) {
         LOG("Error in allocate the codecCtx");
         return -1;
     }
 
-    // 替换解码器上下文参数
+    // 替换解码器上下文参数。将视频流信息拷贝到 AVCodecContext 中
     ret = avcodec_parameters_to_context(codecCtx, codecPar);
     if (ret < 0) {
         LOG("Error in replace the parameters int the codecCtx");
@@ -426,7 +443,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
 
     /**
      * int avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options);
-     * 使用给定的 AVCodec 初始化 AVCodeContext
+     * 使用给定的 AVCodec 初始化 AVCodecContext
      *   avctx: 需要初始化的 AVCodecContext
      *   codec: 输入的 AVCodec
      */
@@ -463,8 +480,11 @@ int convert(struct Input *inputData, struct Output *outputData) {
      */
 
     // 读取码流数据中的一帧视频帧。从输入文件中读取一个 AVPacket 数据包, 存储到 packet 中。一个 packet 是一帧压缩数据（I + P + P + ...）？
-
     av_read_frame(fmtCtx, &packet);
+
+    if(DEBUG) {
+        LOG("packet.pts=%lld", packet.pts);
+    }
 
     if (packet.stream_index == streamType) {                                                 // 读取的数据包类型正确
         /**
@@ -488,8 +508,13 @@ int convert(struct Input *inputData, struct Output *outputData) {
          */
 
         // 从解码器获取解码后的帧，循环获取数据（一个分组数据包可能存在多帧数据）
-        // 异步获取数据，前面 avcodec_send_packet() ，后面 while 循环接收 frame
         while (avcodec_receive_frame(codecCtx, frame) == 0) {
+//            frame->pts = av_rescale_q(av_gettime(), (AVRational){1, 1200000}, fmtCtx->streams[streamType]->time_base);
+            if (DEBUG) {
+                struct AVRational frameRate = av_guess_frame_rate(fmtCtx, fmtCtx->streams[streamType], frame);
+                LOG("帧率：num=%d, den=%d", frameRate.num, frameRate.den);
+                LOG("帧时间戳：%lld", frame->pts);
+            }
             ret = yuv2Jpeg(frame, outputData);
             if (ret != 0) {
                 LOG("Yuv 编码为 Jpeg 失败！ret=%d", ret);
@@ -639,6 +664,7 @@ int H265ToJpeg() {
     outputData->jpeg_data = outputBuf;
     outputData->offset = 0;
 
+    // 将 H265 数据转换为 Jpeg 数据
     int ret = convert(inputData, outputData);
     if (ret != 0) {
         LOG("%s line=%d | H265 解码为 Jpeg 出错！ret=%d", __FUNCTION__, __LINE__, ret);

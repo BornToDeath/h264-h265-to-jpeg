@@ -4,7 +4,7 @@ project(H265ToJpeg)
 set(CMAKE_CXX_STANDARD 11)
 
 # 是否是 debug 环境
-set(DEBUG YES)
+set(DEBUG NO)
 
 if(DEBUG)
     ADD_DEFINITIONS(-D_BUILD_TYPE_DEBUG_)

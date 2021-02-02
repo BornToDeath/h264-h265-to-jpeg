@@ -111,19 +111,6 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named RunH265ToJpeg
-
-# Build rule for target.
-RunH265ToJpeg: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 RunH265ToJpeg
-.PHONY : RunH265ToJpeg
-
-# fast build rule for target.
-RunH265ToJpeg/fast:
-	$(MAKE) -f CMakeFiles/RunH265ToJpeg.dir/build.make CMakeFiles/RunH265ToJpeg.dir/build
-.PHONY : RunH265ToJpeg/fast
-
-#=============================================================================
 # Target rules for targets named H265ToJpeg
 
 # Build rule for target.
@@ -135,33 +122,6 @@ H265ToJpeg: cmake_check_build_system
 H265ToJpeg/fast:
 	$(MAKE) -f CMakeFiles/H265ToJpeg.dir/build.make CMakeFiles/H265ToJpeg.dir/build
 .PHONY : H265ToJpeg/fast
-
-main.o: main.cpp.o
-
-.PHONY : main.o
-
-# target to build an object file
-main.cpp.o:
-	$(MAKE) -f CMakeFiles/RunH265ToJpeg.dir/build.make CMakeFiles/RunH265ToJpeg.dir/main.cpp.o
-.PHONY : main.cpp.o
-
-main.i: main.cpp.i
-
-.PHONY : main.i
-
-# target to preprocess a source file
-main.cpp.i:
-	$(MAKE) -f CMakeFiles/RunH265ToJpeg.dir/build.make CMakeFiles/RunH265ToJpeg.dir/main.cpp.i
-.PHONY : main.cpp.i
-
-main.s: main.cpp.s
-
-.PHONY : main.s
-
-# target to generate assembly for a file
-main.cpp.s:
-	$(MAKE) -f CMakeFiles/RunH265ToJpeg.dir/build.make CMakeFiles/RunH265ToJpeg.dir/main.cpp.s
-.PHONY : main.cpp.s
 
 src/H265ToJpeg.o: src/H265ToJpeg.c.o
 
@@ -198,11 +158,7 @@ help:
 	@echo "... depend"
 	@echo "... rebuild_cache"
 	@echo "... edit_cache"
-	@echo "... RunH265ToJpeg"
 	@echo "... H265ToJpeg"
-	@echo "... main.o"
-	@echo "... main.i"
-	@echo "... main.s"
 	@echo "... src/H265ToJpeg.o"
 	@echo "... src/H265ToJpeg.i"
 	@echo "... src/H265ToJpeg.s"

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required(VERSION 3.16)
 project(H265ToJpeg)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -13,7 +13,7 @@ endif()
 # 头文件目录
 include_directories(
         inc/
-        inc/x86_64
+        inc/x86_64/
 )
 
 # 链接库目录
@@ -25,10 +25,10 @@ link_directories(
 aux_source_directory(src DIR_SRCS)
 
 # 编译成库文件
-add_library(H265ToJpeg_shared SHARED ${DIR_SRCS})
+add_library(H265ToJpeg SHARED ${DIR_SRCS})
 
 # 链接库
-target_link_libraries(H265ToJpeg_shared
+target_link_libraries(H265ToJpeg
         avcodec
         avdevice
         avfilter
@@ -40,10 +40,10 @@ target_link_libraries(H265ToJpeg_shared
 
 if(DEBUG)
     # 编译成可执行文件
-    add_executable(H265ToJpeg main.cpp)
+    add_executable(RunH265ToJpeg main.cpp)
 
     # 链接库
-    target_link_libraries(H265ToJpeg
-            H265ToJpeg_shared
+    target_link_libraries(RunH265ToJpeg
+            H265ToJpeg
     )
 endif()

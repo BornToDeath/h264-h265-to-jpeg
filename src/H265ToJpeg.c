@@ -74,7 +74,7 @@ int readCallback(void *opaque, uint8_t *buf, int buf_size) {
         memcpy(buf, h265_data + data->offset, buf_size);
         data->offset += buf_size;
         if (DEBUG) {
-            LOG("Callback|read size: %d", buf_size);
+            LOG("%s line=%d | read size: %d", __FUNCTION__, __LINE__, buf_size);
         }
         return buf_size;
     } else {
@@ -86,8 +86,8 @@ int readCallback(void *opaque, uint8_t *buf, int buf_size) {
             int real_read = size - data->offset;
             memcpy(buf, h265_data + data->offset, real_read);
             data->offset += buf_size;
-            if(DEBUG){
-                LOG("readCallback | read offset=%d", data->offset);
+            if (DEBUG) {
+                LOG("%s line=%d | read offset=%d", __FUNCTION__, __LINE__, data->offset);
             }
             return real_read;
         }
@@ -549,7 +549,7 @@ struct Input * readH265File(const char * const filePath) {
     }
 
     // 获取源文件的文件类型
-    char fileType[size + 1] = "";
+    char fileType[size + 1];
     memset(fileType, 0, size + 1);
     strncpy(fileType, filePath + (strlen(filePath) - size), size);
 
@@ -674,7 +674,7 @@ int H265ToJpeg(const char * const inputFilePath, const char * const outputFilePa
     // 将 H265 数据转换为 Jpeg 数据
     int ret = convert(inputData, outputData);
     if (ret != 0) {
-        LOG("%s line=%d | H265 解码为 Jpeg 出错！ret=%d", __FUNCTION__, __LINE__, ret);
+        LOG("%s line=%d | H265 转 Jpeg 出错！ret=%d", __FUNCTION__, __LINE__, ret);
         return -1;
     }
 

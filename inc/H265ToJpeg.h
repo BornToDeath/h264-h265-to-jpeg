@@ -11,9 +11,12 @@ extern "C" {
 
 /**
  * H265 帧转 Jpeg
- * @return
+ * @param inputFilePath  输入的 H265 文件路径
+ * @param outputFilePath 输出的 Jpeg 文件路径
+ * @return 0: 成功
+ *        -1: 失败
  */
-int H265ToJpeg();
+int H265ToJpeg(const char * const inputFilePath, const char * const outputFilePath);
 
 #ifdef __cplusplus
 }

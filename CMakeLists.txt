@@ -12,27 +12,23 @@ endif()
 
 # 头文件目录
 include_directories(
-        inc
+        inc/
+        inc/x86_64
 )
 
 # 链接库目录
 link_directories(
-        lib
+        lib/x86_64/
 )
 
 # 源文件
 aux_source_directory(src DIR_SRCS)
 
-# 编译成静态库
-add_library(H265ToJpeg SHARED ${DIR_SRCS})
-
-# 编为成可执行文件
-#add_executable(H265ToJpeg main.cpp ${DIR_SRCS})
-#add_executable(H265ToJpeg main.cpp)
+# 编译成库文件
+add_library(H265ToJpeg_shared SHARED ${DIR_SRCS})
 
 # 链接库
-target_link_libraries(
-        H265ToJpeg
+target_link_libraries(H265ToJpeg_shared
         avcodec
         avdevice
         avfilter
@@ -41,3 +37,13 @@ target_link_libraries(
         swresample
         swscale
 )
+
+if(DEBUG)
+    # 编译成可执行文件
+    add_executable(H265ToJpeg main.cpp)
+
+    # 链接库
+    target_link_libraries(H265ToJpeg
+            H265ToJpeg_shared
+    )
+endif()

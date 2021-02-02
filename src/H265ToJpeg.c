@@ -73,7 +73,9 @@ int readCallback(void *opaque, uint8_t *buf, int buf_size) {
         // 读取未溢出 直接复制
         memcpy(buf, h265_data + data->offset, buf_size);
         data->offset += buf_size;
-        LOG("Callback|read size: %d", buf_size);
+        if (DEBUG) {
+            LOG("Callback|read size: %d", buf_size);
+        }
         return buf_size;
     } else {
         // 已经溢出无法读取
@@ -195,7 +197,7 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
     // 打开编码器
     ret = avcodec_open2(pCodeCtx, pCodec, NULL);
     if (ret < 0) {
-        LOG("Could not open codec.");
+        LOG("Could not open codec, ret = %d", ret);
         return -1;
     }
 
@@ -209,7 +211,7 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
     // 写视频文件头
     ret = avformat_write_header(pFormatCtx, NULL);
     if (ret < 0) {
-        LOG("avformat_write_header fail");
+        LOG("avformat_write_header fail, ret = %d", ret);
         return -1;
     }
 
@@ -219,14 +221,14 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
     // 编码数据
     ret = avcodec_send_frame(pCodeCtx, pFrame);
     if (ret < 0) {
-        LOG("Could not avcodec_send_frame.");
+        LOG("Could not avcodec_send_frame, ret = %d", ret);
         return -1;
     }
 
     // 得到编码后数据
     ret = avcodec_receive_packet(pCodeCtx, &pkt);
     if (ret < 0) {
-        LOG("Could not avcodec_receive_packet");
+        LOG("Could not avcodec_receive_packet, ret = %d", ret);
         return -1;
     }
 //    pkt.pts = av_rescale_q(pkt.pts, pCodeCtx->time_base, pStream->time_base);
@@ -242,7 +244,7 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
     // 写视频数据
     ret = av_write_frame(pFormatCtx, &pkt);
     if (ret < 0) {
-        LOG("Could not av_write_frame");
+        LOG("Could not av_write_frame, ret = %d", ret);
         return -1;
     }
 
@@ -252,7 +254,7 @@ int yuv2Jpeg(AVFrame *pFrame, struct Output *outputData) {
     // 写视频文件尾
     ret = av_write_trailer(pFormatCtx);
     if (ret < 0) {
-        LOG("av_write_trailer fail");
+        LOG("av_write_trailer fail, ret = %d", ret);
         return -1;
     }
 
@@ -369,7 +371,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
     // 获取视频流的索引
     streamType = av_find_best_stream(fmtCtx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
     if (streamType < 0) {
-        LOG("Error in find best stream type");
+        LOG("Error in find best stream type, streamType=%d", streamType);
         return -1;
     }
 
@@ -386,7 +388,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
      * 根据解码器 ID 查找一个匹配的已注册解码器。未找到返回 NULL
      */
 
-    // 对找到的视频流解码器  // todo 软解？？？断点查看是硬解还是软解，是否能调试源码
+    // 对找到的视频流解码器
     codec = avcodec_find_decoder(codecPar->codec_id);
     if (!codec) {
         LOG("%s line=%d | Error in get the codec", __FUNCTION__, __LINE__);
@@ -407,7 +409,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
     // 替换解码器上下文参数。将视频流信息拷贝到 AVCodecContext 中
     ret = avcodec_parameters_to_context(codecCtx, codecPar);
     if (ret < 0) {
-        LOG("Error in replace the parameters int the codecCtx");
+        LOG("Error in replace the parameters int the codecCtx, ret=%d", ret);
         return -1;
     }
 
@@ -495,8 +497,9 @@ int convert(struct Input *inputData, struct Output *outputData) {
          */
 
         // 将数据包发送到解码器中
-        if (avcodec_send_packet(codecCtx, &packet) < 0) {
-            LOG("Error in the send packet");
+        ret = avcodec_send_packet(codecCtx, &packet);
+        if (ret < 0) {
+            LOG("Error in the send packet, ret=%d", ret);
             return -1;
         }
 
@@ -621,25 +624,29 @@ int write2Jpeg(const struct Output * const data, const char * const filePath){
 }
 
 /**
- * H265 转 Jpeg
- * @return  0: 成功
- *         -1: 失败
+ * H265 帧转 Jpeg
+ * @param inputFilePath  输入的 H265 文件路径
+ * @param outputFilePath 输出的 Jpeg 文件路径
+ * @return 0: 成功
+ *        -1: 失败
  */
-int H265ToJpeg() {
+int H265ToJpeg(const char * const inputFilePath, const char * const outputFilePath) {
+
+    if (inputFilePath == NULL || outputFilePath == NULL || strlen(inputFilePath) == 0 || strlen(outputFilePath) == 0) {
+        LOG("输入或输出的文件路径为空，请核查！");
+        return -1;
+    }
 
     /**
      * 【1】读取 H265 帧数据
      */
 
-    char *inputFile = "/Users/lixiaoqing/Desktop/lixiaoqing/codes/c++/H265ToJpeg/imgs/img02.h265";
-    LOG("源文件：%s", inputFile);
-
-    struct Input * inputData = readH265File(inputFile);
-    if(!inputData){
+    struct Input *inputData = readH265File(inputFilePath);
+    if (!inputData) {
         return -1;
     }
 
-    if(DEBUG){
+    if (DEBUG) {
         LOG("H265 file length=%dB", inputData->size);
     }
 
@@ -648,15 +655,15 @@ int H265ToJpeg() {
      */
 
     char *outputBuf = (char *) malloc(HEAP_SIZE * sizeof(char));
-    if(!outputBuf){
+    if (!outputBuf) {
         LOG("%s line=%d | malloc failed.", __FUNCTION__, __LINE__);
         return -1;
     }
 
     memset(outputBuf, 0, HEAP_SIZE);
 
-    struct Output * outputData = (struct Output *)malloc(sizeof(struct Output));
-    if(!outputData){
+    struct Output *outputData = (struct Output *) malloc(sizeof(struct Output));
+    if (!outputData) {
         LOG("%s line=%d | malloc failed.", __FUNCTION__, __LINE__);
         return -1;
     }
@@ -675,17 +682,14 @@ int H265ToJpeg() {
      * 【3】保存 Jpeg 图片数据
      */
 
-    char *outputFile = "/Users/lixiaoqing/Desktop/lixiaoqing/codes/c++/H265ToJpeg/imgs/output.jpeg";
-    LOG("目标文件：%s", outputFile);
-
-    ret = write2Jpeg(outputData, outputFile);
-    if(ret == -1){
-        LOG("%s line=%d | 保存 Jpeg 文件出错！Jpeg 文件路径：%s", __FUNCTION__, __LINE__, outputFile);
+    ret = write2Jpeg(outputData, outputFilePath);
+    if (ret == -1) {
+        LOG("%s line=%d | 保存 Jpeg 文件出错！Jpeg 文件路径：%s", __FUNCTION__, __LINE__, outputFilePath);
         return -1;
     }
 
     if (inputData) {
-        if(inputData->h265_data){
+        if (inputData->h265_data) {
             free(inputData->h265_data);
             inputData->h265_data = NULL;
         }
@@ -693,7 +697,7 @@ int H265ToJpeg() {
     }
 
     if (outputData) {
-        if(outputData->jpeg_data){
+        if (outputData->jpeg_data) {
             free(outputData->jpeg_data);
             outputData->jpeg_data = NULL;
         }

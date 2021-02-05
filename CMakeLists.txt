@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 # 是否是 debug 环境
 set(DEBUG NO)
+set(CMAKE_CXX_FLAGS "-fPIC")
 
 if(DEBUG)
     ADD_DEFINITIONS(-D_BUILD_TYPE_DEBUG_)
@@ -13,12 +14,13 @@ endif()
 # 头文件目录
 include_directories(
         inc/
-        inc/x86_64/
+        inc/jni/
+        inc/ffmpeg/x86_64_shared/
 )
 
 # 链接库目录
 link_directories(
-        lib/x86_64/
+        lib/ffmpeg/x86_64_shared/
 )
 
 # 源文件
@@ -29,13 +31,13 @@ add_library(H265ToJpeg SHARED ${DIR_SRCS})
 
 # 链接库
 target_link_libraries(H265ToJpeg
-        avcodec
         avdevice
         avfilter
         avformat
         avutil
         swresample
         swscale
+        avcodec
 )
 
 if(DEBUG)

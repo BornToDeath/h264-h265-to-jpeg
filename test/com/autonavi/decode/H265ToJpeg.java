@@ -13,14 +13,15 @@ public class H265ToJpeg {
 	static final String libPath9 = "/home/lxq271332/H265ToJpeg/build/libH265ToJpeg.so";
 	
 	static {
+		System.load(libPath5);
 		System.load(libPath1);
+		System.load(libPath4);
 		System.load(libPath2);
 		System.load(libPath3);
-		System.load(libPath4);
-		System.load(libPath5);
 		System.load(libPath6);
 		System.load(libPath7);
 		System.load(libPath8);
+		System.load(libPath9);
 	}
 	
 	public static native boolean decode(String inputPath, String outputPath);

@@ -540,7 +540,7 @@ int convert(struct Input *inputData, struct Output *outputData) {
 
 struct Input * readH265File(const char * const filePath) {
 
-    const char *const h265FileType = "h265";
+    const char *const h265FileType = "h264";
     const int size = strlen(h265FileType);
 
     if (strlen(filePath) <= size) {
@@ -553,8 +553,8 @@ struct Input * readH265File(const char * const filePath) {
     memset(fileType, 0, size + 1);
     strncpy(fileType, filePath + (strlen(filePath) - size), size);
 
-    if (!(strcmp(fileType, "h265") == 0 || strcmp(fileType, "H265") == 0)) {
-        LOG("源文件不是 h265 格式的文件！");
+    if (!(strcmp(fileType, "h264") == 0 || strcmp(fileType, "H264") == 0)) {
+        LOG("源文件不是 h264 格式的文件！");
         return NULL;
     }
 

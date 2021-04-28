@@ -22,6 +22,10 @@
 /* 栈缓冲大小（单位：Byte） */
 #define STACK_SIZE (1024)  // 1KB
 
+typedef int BOOL;
+#define TRUE  (1)
+#define FALSE (0)
+
 /**
  * H265 数据的结构体
  */
@@ -44,14 +48,23 @@ struct Output {
  * @param format
  * @param ...
  */
-void LOG(const char * format, ...){
+void LOG(const char * format, ...) {
     // 对可变参数进行组合，合成一条完整的日志数据
     char log[STACK_SIZE] = {0};
     va_list arg_list;
     va_start(arg_list, format);
     vsnprintf(log, STACK_SIZE, format, arg_list);
     va_end(arg_list);
-    printf("%s\n", log);
+
+    // 获取当前日期
+    time_t curTs;
+    time(&curTs);
+    struct tm *timeInfo = localtime(&curTs);
+    const int size = 64;
+    char now[size];
+    strftime(now, size, "%Y-%m-%d %H:%M:%S", timeInfo);
+
+    printf("%s|%s\n", now, log);
 }
 
 /**
@@ -540,23 +553,37 @@ int convert(struct Input *inputData, struct Output *outputData) {
 
 struct Input * readH265File(const char * const filePath) {
 
-    const char *const h265FileType = "h264";
-    const int size = strlen(h265FileType);
+    /**
+     * 【1】先对文件的类型进行合法性检查
+     */
 
-    if (strlen(filePath) <= size) {
-        LOG("源文件的文件名不正确！");
+    // 获取文件类型后缀名
+    char *fileType = strrchr(filePath, '.');
+    if (fileType == NULL) {
+        LOG("%s", "输入文件的后缀名不正确，请检查文件！");
         return NULL;
     }
 
-    // 获取源文件的文件类型
-    char fileType[size + 1];
-    memset(fileType, 0, size + 1);
-    strncpy(fileType, filePath + (strlen(filePath) - size), size);
-
-    if (!(strcmp(fileType, "h264") == 0 || strcmp(fileType, "H264") == 0)) {
-        LOG("源文件不是 h264 格式的文件！");
+    // 源文件类型
+    char *fileTypesList[] = {".h264", ".H264", ".h265", ".H265"};
+    int size = sizeof(fileTypesList) / sizeof(fileTypesList[0]);
+    BOOL flag = FALSE;
+    int i;
+    for (i = 0; i < size; ++i) {
+        const char *type = fileTypesList[i];
+        if (strcmp(fileType, type) == 0) {
+            flag = TRUE;
+            break;
+        }
+    }
+    if (flag == FALSE) {
+        LOG("输入文件不是 h264 或 h265 的文件，请检查文件！");
         return NULL;
     }
+
+    /**
+     * 【2】读取文件到内存
+     */
 
     char *inputBuf = (char *) malloc(HEAP_SIZE * sizeof(char));
     if (!inputBuf) {
@@ -574,7 +601,7 @@ struct Input * readH265File(const char * const filePath) {
 
     size_t fileLen = fread(inputBuf, 1, HEAP_SIZE, fp_read);
     if (fileLen == 0) {
-        LOG("H265 文件为空！H265 文件路径：%s", filePath);
+        LOG("H265 文件为空，请检查文件！H265 文件路径：%s", filePath);
         fclose(fp_read);
         return NULL;
     }
@@ -633,7 +660,7 @@ int write2Jpeg(const struct Output * const data, const char * const filePath){
 int H265ToJpeg(const char * const inputFilePath, const char * const outputFilePath) {
 
     if (inputFilePath == NULL || outputFilePath == NULL || strlen(inputFilePath) == 0 || strlen(outputFilePath) == 0) {
-        LOG("输入或输出的文件路径为空，请核查！");
+        LOG("输入或输出的文件路径为空，请核查！输入文件:%s, 输出文件:%s", inputFilePath, outputFilePath);
         return -1;
     }
 

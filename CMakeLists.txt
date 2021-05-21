@@ -8,23 +8,31 @@ set(DEBUG NO)
 set(CMAKE_CXX_FLAGS "-fPIC")
 
 if(DEBUG)
+    message(">>> 当前环境: DEBUG")
     ADD_DEFINITIONS(-D_BUILD_TYPE_DEBUG_)
+else()
+    message(">>> 当前环境: RELEASE")
 endif()
 
 # 头文件目录
 include_directories(
-        inc/
-        inc/jni/
-        inc/ffmpeg/x86_64_shared
+        export_inc/
+        src/
+        src/jni/
+        src/ffmpeg/x86_64_shared
 )
 
 # 链接库目录
 link_directories(
         lib/ffmpeg/x86_64_shared
+#        lib/ffmpeg/mac_static
 )
 
 # 源文件
 aux_source_directory(src DIR_SRCS)
+aux_source_directory(src/jni DIR_SRCS)
+
+#message("DIR_SRCS=${DIR_SRCS}")
 
 # 编译成库文件
 add_library(H265ToJpeg SHARED ${DIR_SRCS})
@@ -48,10 +56,10 @@ target_link_libraries(H265ToJpeg
 
 if(DEBUG)
     # 编译成可执行文件
-    add_executable(RunH265ToJpeg main.cpp)
+    add_executable(runH265ToJpeg main.cpp)
 
     # 链接库
-    target_link_libraries(RunH265ToJpeg
+    target_link_libraries(runH265ToJpeg
             H265ToJpeg
     )
 endif()

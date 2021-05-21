@@ -13,11 +13,11 @@
 
 项目结构如下：
 
-`inc`: H265 转 Jpeg 的头文件、ffmpeg 头文件
+`export_inc`: 对外暴露的 H265 转 Jpeg 的头文件
 
 `lib`: ffmpeg 库文件
 
-`src`: H265 转 Jpeg 的源文件
+`src`: H265 转 Jpeg 相关的源文件和头文件
 
 `test`: 测试文件
 

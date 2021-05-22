@@ -7,6 +7,7 @@
 
 
 #include <iostream>
+#include <memory>
 #include "Common.h"
 #include "IDecoder.h"
 

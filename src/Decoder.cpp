@@ -3,6 +3,7 @@
 //
 
 #include <iostream>
+#include <mutex>
 #include "Decoder.h"
 #include "Encoder.h"
 

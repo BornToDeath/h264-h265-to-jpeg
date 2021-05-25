@@ -24,7 +24,7 @@ extern "C" {
 /**
  * 解码器
  */
-class Decoder : public IDecoder{
+class Decoder : public IDecoder {
 
 public:
 
@@ -52,7 +52,7 @@ private:
      * @param filePath
      * @return
      */
-    bool readH265File(const char *const filePath);
+    bool readInputFile(const char *const filePath);
 
     /**
      * 构建 OutPut 结构体
@@ -76,7 +76,7 @@ private:
      * @param filePath
      * @return
      */
-    bool writeJpeg2File(const char * const filePath);
+    bool writeJpeg2File(const char *const filePath);
 
 private:
 
@@ -90,16 +90,16 @@ private:
      */
     std::shared_ptr<Output> outputData;
 
-    AVFormatContext   *fmtCtx;     /* ffmpeg 的全局上下文，所有 ffmpeg 都需要 */
-    AVIOContext       *avioCtx;    /* ffmpeg 字节流 IO 上下文 */
-    AVCodec           *codec;      /* ffmpeg 编解码器 */
-    AVCodecContext    *codecCtx;   /* ffmpeg 编解码上下文 */
+    AVFormatContext *fmtCtx;     /* ffmpeg 的全局上下文，所有 ffmpeg 都需要 */
+    AVIOContext *avioCtx;    /* ffmpeg 字节流 IO 上下文 */
+    AVCodec *codec;      /* ffmpeg 编解码器 */
+    AVCodecContext *codecCtx;   /* ffmpeg 编解码上下文 */
     AVCodecParameters *codecPar;   /* ffmpeg 编解码器参数 */
-    AVFrame           *frame;      /* ffmpeg 单帧缓存 */
+    AVFrame *frame;      /* ffmpeg 单帧缓存 */
 //    AVStream          *stream;     /* ffmpeg 视频流 */
-    AVPacket          *packet;     /* ffmpeg 单帧数据包 */
-    unsigned char     *ioBuf;      /* IO Buffer */
-    int               streamType;  /* ffmpeg 流类型 */
+    AVPacket *packet;     /* ffmpeg 单帧数据包 */
+    unsigned char *ioBuf;      /* IO Buffer */
+    int streamType;  /* ffmpeg 流类型 */
 };
 
 #endif //H265TOJPEG_DECODER_H

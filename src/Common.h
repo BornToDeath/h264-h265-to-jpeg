@@ -19,6 +19,8 @@
 #define STACK_SIZE (1024)  // 1KB
 
 
+extern void LOG(const char *format, ...);
+
 /**
  * H265 数据的结构体
  */
@@ -27,10 +29,13 @@ public:
     Input() = default;
 
     ~Input() {
+        LOG("%s", __PRETTY_FUNCTION__);
         if (h265_data) {
             free(h265_data);
             h265_data = nullptr;
         }
+        offset = 0;
+        size = 0;
     }
 
 public:
@@ -48,10 +53,12 @@ public:
     Output() = default;
 
     ~Output() {
+        LOG("%s", __PRETTY_FUNCTION__);
         if (jpeg_data) {
             free(jpeg_data);
             jpeg_data = nullptr;
         }
+        offset = 0;
     }
 
 public:

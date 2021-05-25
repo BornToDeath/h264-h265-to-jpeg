@@ -13,6 +13,9 @@ JNIEXPORT jboolean JNICALL Java_com_autonavi_socol_occtiltedserver_service_H265D
     const char *output = env->GetStringUTFChars(outputPath, NULL);
 
     // H265 转 Jpeg
-    bool isOk = IDecoder::getInstance()->H265ToJpeg(input, output);
+    auto decoder = IDecoder::getInstance();
+    bool isOk = decoder->H265ToJpeg(input, output);
+    delete decoder;
+    decoder = nullptr;
     return isOk;
 }

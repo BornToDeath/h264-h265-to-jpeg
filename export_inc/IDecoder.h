@@ -28,6 +28,11 @@ public:
      * @return
      */
     static IDecoder *getInstance();
+
+    /**
+     * 释放单例
+     */
+    void release();
 };
 
 #endif //H265TOJPEG_IDECODER_H

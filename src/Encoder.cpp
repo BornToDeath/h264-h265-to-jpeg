@@ -23,7 +23,9 @@ int writeCallback(void *opaque, uint8_t *buf, int buf_size) {
     Output *data = (Output *) opaque;
     memcpy(data->jpeg_data + data->offset, buf, buf_size);
     data->offset += buf_size;
-
+    if (DEBUG) {
+        LOG("%s | data->offset=%d, buf_size=%d", __PRETTY_FUNCTION__, data->offset, buf_size);
+    }
     return buf_size;
 }
 
@@ -40,13 +42,19 @@ Encoder::Encoder() {
 }
 
 Encoder::~Encoder() {
+    if (DEBUG) {
+        LOG("%s", __PRETTY_FUNCTION__);
+    }
     release();
 }
 
 void Encoder::release() {
+    if (DEBUG) {
+        LOG("%s", __PRETTY_FUNCTION__);
+    }
     if (ioBuf) {
         // 释放 IO Buffer
-        av_free(ioBuf);
+        av_freep(&ioBuf);
         ioBuf = nullptr;
     }
     if (pIOCtx) {
@@ -79,7 +87,7 @@ bool Encoder::yuv2Jpeg(AVFrame *pFrame, Output *outputData) {
     // IO Buffer
     ioBuf = (unsigned char *)av_malloc(HEAP_SIZE);
     if (!ioBuf) {
-        LOG("%s line=%d | av_malloc failed", __FUNCTION__, __LINE__);
+        LOG("%s line=%d | av_malloc failed", __PRETTY_FUNCTION__, __LINE__);
         release();
         return false;
     }
@@ -87,7 +95,7 @@ bool Encoder::yuv2Jpeg(AVFrame *pFrame, Output *outputData) {
     // 初始化 AVIOContext。将 outputData 中数据写入到 outBuf 中
     pIOCtx = avio_alloc_context(ioBuf, HEAP_SIZE, 1, outputData, NULL, writeCallback, NULL);
     if (!pIOCtx) {
-        LOG("%s line=%d | avio_alloc_context failed.", __FUNCTION__, __LINE__);
+        LOG("%s line=%d | avio_alloc_context failed.", __PRETTY_FUNCTION__, __LINE__);
         release();
         return false;
     }
@@ -132,11 +140,11 @@ bool Encoder::yuv2Jpeg(AVFrame *pFrame, Output *outputData) {
         LOG("帧类型：%d", pFrame->pict_type);
         LOG("帧时间戳：%lld", pFrame->pts);
         LOG("codec_id=%d", pCodecPars->codec_id);
+        LOG("pFrame->width=%d, pFrame->height=%d", pFrame->width, pFrame->height);
     }
 
     // 通过 id 查找一个匹配的已经注册的音视频编码器
     pCodec = avcodec_find_encoder(pCodecPars->codec_id);
-
     if (!pCodec) {
         LOG("Could not find encoder");
         release();

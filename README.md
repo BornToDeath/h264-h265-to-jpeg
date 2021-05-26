@@ -9,6 +9,28 @@
 1. 解码：将 H264/H265 解码为 YUV。
 2. 编码：将 YUV 编码为 Jpeg。
 
+
+## 使用示例
+
+```c++
+#include "IDecoder.h"
+
+// 创建解码器实例
+auto decoder = IDecoder::getInstance();
+if (!decoder) {
+    return false;
+}
+
+// 进行解码
+bool isOk = decoder->H265ToJpeg(inputFilePath, outputFilePath);
+if (isOk) {
+    std::cout << "解码成功！" << std::endl;
+} else {
+    std::cout << "解码失败！" << std::endl;
+}
+```
+
+
 ## 项目结构
 
 项目结构如下：
@@ -19,7 +41,7 @@
 
 `src`: H265 转 Jpeg 相关的源文件和头文件
 
-`test`: 测试文件
+`test`: 测试文件（测试图片、用于 JNI 调用的 Java Native 代码等）
 
 `CMakeLists.txt`: CMakeLists 文件
 

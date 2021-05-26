@@ -13,7 +13,7 @@
 #endif
 
 /* 堆缓冲大小（单位：Byte） */
-#define HEAP_SIZE (1024 * 1024)  // 1MB
+#define HEAP_SIZE (1024 * 1024 * 2)  // 2MB
 
 /* 栈缓冲大小（单位：Byte） */
 #define STACK_SIZE (1024)  // 1KB

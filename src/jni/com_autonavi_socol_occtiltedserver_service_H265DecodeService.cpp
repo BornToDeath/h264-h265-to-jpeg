@@ -4,6 +4,7 @@
 
 #include "com_autonavi_socol_occtiltedserver_service_H265DecodeService.h"
 #include "IDecoder.h"
+#include <memory>
 
 
 JNIEXPORT jboolean JNICALL Java_com_autonavi_socol_occtiltedserver_service_H265DecodeService_decode
@@ -12,10 +13,18 @@ JNIEXPORT jboolean JNICALL Java_com_autonavi_socol_occtiltedserver_service_H265D
     const char *input = env->GetStringUTFChars(inputPath, NULL);
     const char *output = env->GetStringUTFChars(outputPath, NULL);
 
-    // H265 转 Jpeg
+    /**
+     * H265 转 Jpeg
+     */
+
+    // 创建解码器示例
     auto decoder = IDecoder::getInstance();
+    if (!decoder) {
+        return false;
+    }
+
+    // 进行解码
     bool isOk = decoder->H265ToJpeg(input, output);
-    delete decoder;
-    decoder = nullptr;
+
     return isOk;
 }

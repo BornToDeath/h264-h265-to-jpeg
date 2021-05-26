@@ -4,7 +4,7 @@ project(H265ToJpeg)
 set(CMAKE_CXX_STANDARD 11)
 
 # 是否是 debug 环境
-set(DEBUG YES)
+set(DEBUG NO)
 set(CMAKE_CXX_FLAGS "-fPIC")
 
 if(DEBUG)
@@ -20,12 +20,13 @@ include_directories(
         src/
         src/jni/
         src/ffmpeg/x86_64_shared
+        # src/ffmpeg/mac_static
 )
 
 # 链接库目录
 link_directories(
-#        lib/ffmpeg/x86_64_shared
-        lib/ffmpeg/mac_static
+        lib/ffmpeg/x86_64_shared
+        # lib/ffmpeg/mac_static
 )
 
 # 源文件

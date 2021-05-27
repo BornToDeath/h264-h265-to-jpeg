@@ -19,6 +19,7 @@ extern "C" {
 }
 #endif
 
+#include <memory>
 #include "Common.h"
 
 
@@ -58,7 +59,18 @@ private:
      */
     bool saveJpegtoFile(const char * filePath);
 
+    /**
+     * 构建输出数据
+     * @return
+     */
+    bool constructOutputData();
+
 private:
+
+    /**
+     * Jpeg 数据结构
+     */
+    std::shared_ptr<Output> outputData;
 
     const char * outputFilePath;    /* 输出文件的路径 */
     unsigned char *ioBuf;           /* IO Buffer */

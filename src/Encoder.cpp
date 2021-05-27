@@ -7,7 +7,7 @@
 /**
  * Jpeg 数据结构
  */
-Output * outputData = nullptr;
+//Output * outputData = nullptr;
 
 /**
  * 日志
@@ -18,33 +18,6 @@ extern void LOG(const char *format, ...);
 
 
 /**
- * 构建输出数据
- * @return
- */
-bool constructOutputData() {
-    char *outputBuf = (char *) malloc(HEAP_SIZE * sizeof(char));
-    if (!outputBuf) {
-        LOG("%s line=%d | malloc failed.", __PRETTY_FUNCTION__, __LINE__);
-        return false;
-    }
-
-    memset(outputBuf, 0, HEAP_SIZE);
-
-    outputData = new Output();
-    if (!outputData) {
-        LOG("%s line=%d | malloc failed.", __PRETTY_FUNCTION__, __LINE__);
-        free(outputBuf);
-        outputBuf = nullptr;
-        return false;
-    }
-
-    outputData->jpeg_data = outputBuf;
-    outputData->offset = 0;
-
-    return true;
-}
-
-/**
  * 写文件的回调函数
  * @param opaque
  * @param buf
@@ -52,7 +25,7 @@ bool constructOutputData() {
  * @return
  */
 int writeCallback(void *opaque, uint8_t *buf, int buf_size) {
-//    Output *data = (Output *) opaque;
+    Output *outputData = (Output *) opaque;
     memcpy(outputData->jpeg_data + outputData->offset, buf, buf_size);
     outputData->offset += buf_size;
     if (DEBUG) {
@@ -85,10 +58,10 @@ void Encoder::release() {
     if (DEBUG) {
         LOG("%s", __PRETTY_FUNCTION__);
     }
-    if (outputData) {
-        delete outputData;
-        outputData = nullptr;
-    }
+//    if (outputData) {
+//        delete outputData;
+//        outputData = nullptr;
+//    }
     if (ioBuf) {
         // 释放 IO Buffer
         av_freep(&ioBuf);
@@ -149,7 +122,7 @@ bool Encoder::yuv2Jpeg(AVFrame *pFrame) {
     }
 
     // 初始化 AVIOContext。将 outputData 中数据写入到 outBuf 中
-    pIOCtx = avio_alloc_context(ioBuf, HEAP_SIZE, 1, NULL, NULL, writeCallback, NULL);
+    pIOCtx = avio_alloc_context(ioBuf, HEAP_SIZE, 1, outputData.get(), NULL, writeCallback, NULL);
     if (!pIOCtx) {
         LOG("%s line=%d | avio_alloc_context failed.", __PRETTY_FUNCTION__, __LINE__);
         release();
@@ -330,6 +303,34 @@ bool Encoder::yuv2Jpeg(AVFrame *pFrame) {
 
     // 此处无需调用 release(), 因为此类在析构时会自动调用 release()
     release();
+
+    return true;
+}
+
+/**
+ * 构建输出数据
+ * @return
+ */
+bool Encoder::constructOutputData() {
+    char *outputBuf = (char *) malloc(HEAP_SIZE * sizeof(char));
+    if (!outputBuf) {
+        LOG("%s line=%d | malloc failed.", __PRETTY_FUNCTION__, __LINE__);
+        return false;
+    }
+
+    memset(outputBuf, 0, HEAP_SIZE);
+
+//    outputData = new Output();
+    outputData = std::make_shared<Output>();
+    if (!outputData) {
+        LOG("%s line=%d | malloc failed.", __PRETTY_FUNCTION__, __LINE__);
+        free(outputBuf);
+        outputBuf = nullptr;
+        return false;
+    }
+
+    outputData->jpeg_data = outputBuf;
+    outputData->offset = 0;
 
     return true;
 }
